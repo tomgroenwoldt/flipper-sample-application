@@ -15,7 +15,7 @@ pub struct Position {
     pub y: i32,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 pub enum Direction {
     Up,
     Down,
@@ -36,6 +36,7 @@ impl From<&Direction> for IconRotation {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct Manager {
     pub position: Position,
     pub direction: Direction,
@@ -43,8 +44,12 @@ pub struct Manager {
 }
 
 impl Manager {
-    pub fn hunt(&mut self, target: Position) {
-        // Move in the x direction.
+    pub fn hunt(&mut self, target: Position, old_managers: Vec<Manager>) -> Position {
+        // Dead managers stay at their position.
+        if self.time_of_death.is_some() {
+            return self.position;
+        }
+
         let random_value = unsafe { random() % 100 };
         let normalized_value = random_value as f64 / 100.0;
 
@@ -69,15 +74,25 @@ impl Manager {
             }
             (Some(x), None) => x,
             (None, Some(y)) => y,
-            (None, None) => return,
+            (None, None) => return self.position,
         };
-        self.step(direction)
+        let new_position = self.step(direction);
+
+        // Only move if the field is free
+        if old_managers
+            .iter()
+            .any(|old_manager| old_manager.position.eq(&new_position))
+        {
+            self.position
+        } else {
+            self.step(direction)
+        }
     }
 }
 
 impl Movement for Manager {
-    fn get_position_mut(&mut self) -> &mut Position {
-        &mut self.position
+    fn get_position(&self) -> Position {
+        self.position
     }
 
     fn get_direction_mut(&mut self) -> &mut Direction {
@@ -92,8 +107,8 @@ pub struct Forklift {
 }
 
 impl Movement for Forklift {
-    fn get_position_mut(&mut self) -> &mut Position {
-        &mut self.position
+    fn get_position(&self) -> Position {
+        self.position
     }
 
     fn get_direction_mut(&mut self) -> &mut Direction {
@@ -107,33 +122,35 @@ pub struct GameState {
 }
 
 pub trait Movement {
-    fn get_position_mut(&mut self) -> &mut Position;
+    fn get_position(&self) -> Position;
 
     fn get_direction_mut(&mut self) -> &mut Direction;
 
-    fn step(&mut self, direction: Direction) {
+    fn step(&mut self, direction: Direction) -> Position {
+        let mut new_position = self.get_position();
         match direction {
             Direction::Up => {
-                if self.get_position_mut().y > 0 {
-                    self.get_position_mut().y -= 1;
+                if self.get_position().y > 0 {
+                    new_position.y -= 1;
                 }
             }
             Direction::Down => {
-                if self.get_position_mut().y < Y_CELL_COUNT - 1 {
-                    self.get_position_mut().y += 1;
+                if self.get_position().y < Y_CELL_COUNT - 1 {
+                    new_position.y += 1;
                 }
             }
             Direction::Left => {
-                if self.get_position_mut().x > 0 {
-                    self.get_position_mut().x -= 1;
+                if self.get_position().x > 0 {
+                    new_position.x -= 1;
                 }
             }
             Direction::Right => {
-                if self.get_position_mut().x < X_CELL_COUNT - 1 {
-                    self.get_position_mut().x += 1;
+                if self.get_position().x < X_CELL_COUNT - 1 {
+                    new_position.x += 1;
                 }
             }
         }
         *self.get_direction_mut() = direction;
+        new_position
     }
 }
